@@ -33,7 +33,7 @@ public class SquareFlowLayout: UICollectionViewFlowLayout {
         }
     }
 
-    private var cache: [IndexPath: UICollectionViewLayoutAttributes] = [:]
+    private var cache: [UICollectionViewLayoutAttributes] = []
     private var contentHeight: CGFloat = 0
     @IBInspectable public var interSpacing: CGFloat = 1
     private var contentWidth: CGFloat {
@@ -59,16 +59,56 @@ public class SquareFlowLayout: UICollectionViewFlowLayout {
         if cache.isEmpty {
             prepare()
         }
-        for (_, layoutAttributes) in cache {
-            if rect.intersects(layoutAttributes.frame) {
-                layoutAttributesArray.append(layoutAttributes)
+        // binary search, find a LayoutAttributes in rect
+        var lower = 0, upper = cache.count - 1, middle = (lower + upper) / 2
+        while lower <= upper {
+            let layoutAttributes = cache[middle]
+            if layoutAttributes.frame.maxY < rect.minY {
+                lower = middle + 1
+                middle = (lower + upper) / 2
+            } else if layoutAttributes.frame.minY > rect.maxY {
+                upper = middle - 1
+                middle = (lower + upper) / 2
+            } else { // found
+                break
+            }
+        }
+
+        // found
+        if lower <= upper {
+            lower = middle - 1
+            upper = middle + 1
+            layoutAttributesArray.append(cache[middle])
+            // line search, find lower LayoutAttributes from middle
+            while lower >= 0 {
+                let attrs = [lower, lower - 1, lower - 2]
+                    .filter { $0 >= 0 }
+                    .map { self.cache[$0] }
+                    .filter { rect.intersects($0.frame) }
+                if attrs.count == 0 {
+                    break
+                }
+                layoutAttributesArray.append(contentsOf: attrs)
+                lower -= 3
+            }
+            // line search, find upper LayoutAttributes from middle
+            while upper <= cache.count - 1 {
+                let attrs = [upper, upper + 1, upper + 2]
+                    .filter { $0 < self.cache.count }
+                    .map { self.cache[$0] }
+                    .filter { rect.intersects($0.frame) }
+                if attrs.count == 0 {
+                    break
+                }
+                layoutAttributesArray.append(contentsOf: attrs)
+                upper += 3
             }
         }
         return layoutAttributesArray
     }
 
     public override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        return cache[indexPath]
+        return cache[indexPath.row]
     }
 
     public override func prepare() {
@@ -105,7 +145,7 @@ public class SquareFlowLayout: UICollectionViewFlowLayout {
                 let targetLayoutAttributes = UICollectionViewLayoutAttributes(forCellWith: indexPath)
                 targetLayoutAttributes.frame = rect
                 contentHeight = max(rect.maxY, contentHeight)
-                cache[indexPath] = targetLayoutAttributes
+                cache.append(targetLayoutAttributes)
                 index = index + 1
             }
         }
